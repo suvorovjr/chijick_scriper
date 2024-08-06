@@ -1,3 +1,4 @@
+annotated-types==0.7.0
 attrs==24.2.0
 Automat==22.10.0
 certifi==2024.7.4
@@ -21,6 +22,8 @@ Protego==0.3.1
 pyasn1==0.6.0
 pyasn1_modules==0.4.0
 pycparser==2.22
+pydantic==2.8.2
+pydantic_core==2.20.1
 PyDispatcher==2.0.7
 pyOpenSSL==24.2.1
 queuelib==1.7.0
