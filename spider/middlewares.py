@@ -2,8 +2,9 @@
 #
 # See documentation in:
 # https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+import json
 
-from scrapy import signals
+from scrapy import signals, Request
 
 # useful for handling different item types with a single interface
 from itemadapter import is_item, ItemAdapter
@@ -101,3 +102,66 @@ class SpiderDownloaderMiddleware:
 
     def spider_opened(self, spider):
         spider.logger.info("Spider opened: %s" % spider.name)
+
+
+class MultiAccountAuthMiddleware:
+    def __init__(self, tokens_file):
+        self.tokens_file = tokens_file
+        self.accounts = None
+        self.current_account_index = 0
+
+    @classmethod
+    def from_crawler(cls, crawler):
+        return cls(tokens_file=crawler.settings.get('TOKENS_FILE'))
+
+    def load_tokens(self):
+        with open(self.tokens_file, 'r', encoding='utf-8') as file:
+            return json.load(file)
+
+    def save_tokens(self):
+        with open(self.tokens_file, 'w', encoding='utf-8') as file:
+            json.dump(self.accounts, file, indent=4, ensure_ascii=False)
+
+    def get_current_account(self):
+        return self.accounts[self.current_account_index]
+
+    def rotate_account(self):
+        self.current_account_index = (self.current_account_index + 1) % len(self.accounts)
+
+    def process_request(self, request, spider):
+        account = self.get_current_account()
+        request.header['authorization'] = f'Bearer {account["access_token"]}'
+        request.cookies = account.get("cookies", {})
+        return None
+
+    def process_response(self, request, response, spider):
+        if response.status == 401:
+            return self.refresh_tokens_and_retry(request, spider)
+        return response
+
+    def refresh_tokens_and_retry(self, request, spider):
+        account = self.get_current_account()
+        refresh_url = 'https://app.chizhik.club/api/v1/x5id/refresh/'
+        return Request(
+            refresh_url,
+            method='POST',
+            body=json.dumps({'refresh_token': account['refresh_token']}),
+            headers={'Content-Type': 'application/json'},
+            callback=self.on_refresh_token_response,
+            meta={'original_request': request, 'account_index': self.current_account_index}
+        )
+
+    def on_refresh_token_response(self, response):
+        account_index = response.meta['account_index']
+        account = self.accounts[account_index]
+        if response.status == 200:
+            data = json.loads(response.text)
+            account['access_token'] = data.get('access_token')
+            account['refresh_token'] = data.get('refresh_token')
+            self.save_tokens()
+            original_request = response.meta['original_request']
+            original_request.headers['Authorization'] = f'Bearer {account["access_token"]}'
+            return original_request.copy()
+        else:
+            self.rotate_account()
+            return self.process_request(response.meta['original_request'], response.meta['spider'])
