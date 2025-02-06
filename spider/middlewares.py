@@ -107,7 +107,7 @@ class SpiderDownloaderMiddleware:
 class MultiAccountAuthMiddleware:
     def __init__(self, tokens_file):
         self.tokens_file = tokens_file
-        self.accounts = None
+        self.accounts = self.load_tokens()
         self.current_account_index = 0
 
     @classmethod
@@ -130,12 +130,11 @@ class MultiAccountAuthMiddleware:
 
     def process_request(self, request, spider):
         account = self.get_current_account()
-        request.header['authorization'] = f'Bearer {account["access_token"]}'
-        request.cookies = account.get("cookies", {})
+        request.headers['authorization'] = f'Bearer {account["access_token"]}'
         return None
 
     def process_response(self, request, response, spider):
-        if response.status == 401:
+        if response.status == 401 or response.status == 407:
             return self.refresh_tokens_and_retry(request, spider)
         return response
 
@@ -165,3 +164,19 @@ class MultiAccountAuthMiddleware:
         else:
             self.rotate_account()
             return self.process_request(response.meta['original_request'], response.meta['spider'])
+
+    def get_headers_for_reload_token(self, account_index):
+        account = self.accounts[account_index]
+        headers = {
+            'accept': 'application/json, text/plain, */*',
+            'accept-language': 'ru',
+            'appversion': '1.17.0',
+            'authorization': f'Bearer {account["access_token"]}',
+            'baggage': 'sentry-environment=production,sentry-public_key=d4f93d58429f462cb9ebf00cc7018aa9,sentry-release=chizhik-mobile-app%401.17.0,sentry-trace_id=a88470e807e343c390838714607b1c93',
+            'connection': 'keep-alive',
+            'content-type': 'application/json',
+            'host': 'app.chizhik.club',
+            'sentry-trace': 'a88470e807e343c390838714607b1c93-e3eeccc1f8874b92-0',
+            'user-agent': 'chizhik_app/394 CFNetwork/1410.1 Darwin/22.6.0',
+        }
+        return headers

@@ -6,7 +6,10 @@
 import scrapy
 
 
-class SpiderItem(scrapy.Item):
-    # define the fields for your item here like:
-    # name = scrapy.Field()
-    pass
+class ProductItem(scrapy.Item):
+    id = scrapy.Field()
+    name = scrapy.Field()
+    regular_price = scrapy.Field()
+    promo_price = scrapy.Field()
+    rating = scrapy.Field()
+    image_links = scrapy.Field()
